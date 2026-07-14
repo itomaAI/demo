@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>itomaAI Demo Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans antialiased min-h-screen">
+    <!-- Header -->
+    <header class="bg-white shadow-sm">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-bold text-gray-900 tracking-tight">itomaAI <span class="text-blue-600 font-medium">Demo Labs</span></h1>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div class="mb-8">
+            <h2 class="text-3xl font-extrabold text-gray-900">Demo Applications</h2>
+            <p class="mt-2 text-sm text-gray-600">株式会社itomaAIが提供・検証中のデモアプリケーション一覧です。</p>
+        </div>
+
+        <!-- Demo List (Grid) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="demo-list">
+            
+            <!-- Template Item (Currently Empty, waiting for the first app) -->
+            <div class="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden flex flex-col">
+                <div class="p-5 flex-1">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Comming Soon</h3>
+                    <p class="text-sm text-gray-600 line-clamp-3">
+                        現在、公開準備中のデモアプリです。橋本様が作成された電話基盤モック等がここに追加される予定です。
+                    </p>
+                </div>
+                <div class="bg-gray-50 px-5 py-3 border-t border-gray-100">
+                    <a href="#" class="text-blue-600 hover:text-blue-800 text-sm font-medium disabled opacity-50 cursor-not-allowed">View Demo &rarr;</a>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-200 mt-auto">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex justify-between items-center">
+            <p class="text-xs text-gray-500">&copy; 2026 itomaAI Inc. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>
