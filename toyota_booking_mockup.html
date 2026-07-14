@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>WEB入庫予約</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        toyota: { red: '#EB0A1E', black: '#000000', gray: '#F5F5F5', border: '#E5E7EB', text: '#333333' }
+                    },
+                    fontSize: { 'xxs': '0.65rem' }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; background-color: #E2E8F0; color: #333333; margin: 0; }
+        .app-container { max-width: 414px; margin: 0 auto; background-color: #ffffff; min-height: 100vh; position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.05); display: flex; flex-direction: column; overflow: hidden; }
+        .app-content { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; scroll-behavior: smooth; background-color: #ffffff; }
+        .header { position: sticky; top: 0; background: white; z-index: 50; border-bottom: 1px solid #E5E7EB; }
+        .sticky-footer { position: sticky; bottom: 0; background: white; padding: 16px; border-top: 1px solid #E5E7EB; z-index: 40; width: 100%; box-shadow: 0 -4px 10px rgba(0,0,0,0.03); }
+        .fade-in { animation: fadeIn 0.2s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* フォーム部品 */
+        .custom-checkbox { appearance: none; background-color: #fff; margin: 0; width: 20px; height: 20px; border: 1px solid #ccc; border-radius: 2px; display: grid; place-content: center; cursor: pointer; }
+        .custom-checkbox::before { content: ""; width: 10px; height: 10px; transform: scale(0); transition: 120ms transform ease-in-out; box-shadow: inset 1em 1em white; background-color: white; transform-origin: center; clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%); }
+        .custom-checkbox:checked { background-color: #EB0A1E; border-color: #EB0A1E; }
+        .custom-checkbox:checked::before { transform: scale(1); }
+        .custom-radio { appearance: none; background-color: #fff; margin: 0; width: 20px; height: 20px; border: 1px solid #ccc; border-radius: 50%; display: grid; place-content: center; cursor: pointer; pointer-events: none; }
+        .custom-radio::before { content: ""; width: 10px; height: 10px; border-radius: 50%; transform: scale(0); transition: 120ms transform ease-in-out; background-color: #EB0A1E; }
+        .custom-radio:checked { border-color: #EB0A1E; }
+        .custom-radio:checked::before { transform: scale(1); }
+        
+        .stepper-circle { width: 40px; height: 40px; border-radius: 50%; border: 3px solid #E5E7EB; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; position: relative;}
+        
+        .calendar-cell { height: 48px; border-bottom: 1px solid #f0f0f0; vertical-align: top; padding-top: 4px; }
+        .calendar-cell.selectable { cursor: pointer; }
+        .calendar-cell.selectable:active { background-color: #fce7e8; }
+        .calendar-cell.selected { border: 2px solid #EB0A1E; border-radius: 4px; background-color: #fce7e8; }
+        
+        .modal-overlay { position: fixed; inset: 0; background-color: rgba(0,0,0,0.5); backdrop-filter: blur(2px); z-index: 200; display: flex; flex-direction: column; justify-content: flex-end; }
+        .bottom-sheet { transform: translateY(100%); transition: transform 0.3s ease-out; background: white; border-top-left-radius: 1rem; border-top-right-radius: 1rem; max-height: 85%; display: flex; flex-direction: column; width: 100%; max-width: 414px; margin: 0 auto; }
+        .bottom-sheet.open { transform: translateY(0); }
+        
+        .full-modal { position: fixed; inset: 0; background: white; z-index: 300; display: flex; flex-direction: column; transform: translateY(100%); transition: transform 0.3s ease-out; width: 100%; max-width: 414px; margin: 0 auto; }
+        .full-modal.open { transform: translateY(0); }
+        
+        details > summary { list-style: none; }
+        details > summary::-webkit-details-marker { display: none; }
+        .debug-panel { display: none; background: #fff; border-bottom: 2px solid #ccc; padding: 10px; font-size: 12px; }
+        .debug-panel.active { display: block; }
+    </style>
+</head>
+<body>
+
+    <div class="app-container" style="min-height: auto; box-shadow: none; background: transparent;">
+        <button id="btn-toggle-debug" class="w-full bg-gray-800 text-white text-xs py-2 opacity-50 hover:opacity-100 transition-opacity">🛠 デバッグ・シーン切替パネル</button>
+        <div id="debugPanel" class="debug-panel">
+            <div class="grid grid-cols-2 gap-2">
+                <button class="js-action border p-2 rounded hover:bg-gray-50" data-action="scenario" data-val="line">📱 LINEから開始</button>
+                <button class="js-action border p-2 rounded hover:bg-gray-50" data-action="scenario" data-val="default">🚗 初期TOP（車なし）</button>
+                <button class="js-action border p-2 rounded hover:bg-gray-50" data-action="scenario" data-val="one_car">🚙 1台リクエスト中</button>
+                <button class="js-action border p-2 rounded hover:bg-gray-50" data-action="scenario" data-val="confirmed">✅ 予約確定状態</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- アプリ本体コンテナ -->
+    <div class="app-container flex flex-col h-[100vh]" id="app-root">
+        <!-- スクロール可能なコンテンツ領域 -->
+        <div class="app-content flex flex-col" id="app"></div>
+    </div>
+
+    <script>
+        // =========================================================
+        // 1. データとステート管理
+        // =========================================================
+        const MOCK_DATA = {
+            stores: {
+                favorites: [ { id: 's1', name: '高井戸北陸橋店', company: 'トヨタモビリティ東京', address: '東京都杉並区高井戸東4丁目11-20', tel: '03-3335-2521', hours: '10:00 - 18:00', holiday: '火曜、第1・第3月曜', img: 'https://images.unsplash.com/photo-1542362567-b07e54358753?w=400&q=80' } ],
+                others: { 'トヨタモビリティ東京': [ { id: 's3', name: '高井戸北陸橋店', label: '常用店舗', img: 'https://images.unsplash.com/photo-1542362567-b07e54358753?w=100' }, { id: 's4', name: '井荻店', img: 'https://images.unsplash.com/photo-1551522435-a13afa10f103?w=100' } ] }
+            },
+            vehicles: [
+                { id: 'v1', name: 'クラウン', type: 'CROSSOVER RS', plate: '名古屋 000 か 1234', chassis: '123-123456', expire: '2026年12月10日', recommendedDate: '2025年7月20日', img: 'https://images.unsplash.com/photo-1603584173870-7f23fdae1b7a?w=400&q=80' },
+                { id: 'v2', name: 'カローラ', type: 'W×B', plate: '名古屋 000 か 1234', chassis: '987-654321', expire: '2026年3月15日', recommendedDate: '2025年11月15日', img: 'https://images.unsplash.com/photo-1590362891991-f776e747a588?w=400&q=80' }
+            ],
+            services: [
+                { id: 'srv1', name: '12ヶ月定期点検', time: '1時間〜', desc: 'メンテナンス詳細文章が入ります。' },
+                { id: 'srv2', name: '無料1ヶ月点検', time: '1時間〜', desc: '新車登録から1ヶ月目の無料点検です。' }
+            ]
+        };
+
+        const state = {
+            view: 'line',
+            agreedToTerms: true,
+            reservations: [], 
+            draft: { store: null, vehicle: null, service: null, date1: null, date2: null, date3: null, comment: '' },
+            calendar: { currentYear: 2025, currentMonth: 7, selectedDateObj: null, targetSlot: 1 },
+            ui: { termsModalOpen: false, timeModalOpen: false }
+        };
+
+        // =========================================================
+        // 2. イベント・デリゲーション (最適化されたバックエンド処理)
+        // =========================================================
+        document.body.addEventListener('click', (e) => {
+            // 最も近い js-action を持つ要素を探す
+            const target = e.target.closest('.js-action');
+            if (!target) return;
+
+            const action = target.getAttribute('data-action');
+            const val = target.getAttribute('data-val');
+
+            switch(action) {
+                case 'navigate':
+                    navigate(val);
+                    break;
+                case 'start-reserve':
+                    state.draft = { store: null, vehicle: null, service: null, date1: null, date2: null, date3: null, comment: '' };
+                    navigate('store');
+                    break;
+                case 'cancel-reservation':
+                    if(confirm('この予約をキャンセルしますか？')) {
+                        state.reservations = state.reservations.filter(r => r.id !== val);
+                        render();
+                    }
+                    break;
+                case 'select-store':
+                    const store = MOCK_DATA.stores.favorites.find(x => x.id === val);
+                    if(store) { state.draft.store = store; navigate('vehicle'); }
+                    break;
+                case 'select-vehicle':
+                    const vehicle = MOCK_DATA.vehicles.find(x => x.id === val);
+                    if(vehicle) { state.draft.vehicle = vehicle; render(); }
+                    break;
+                case 'select-service':
+                    const srv = MOCK_DATA.services.find(x => x.id === val);
+                    if(srv) { state.draft.service = srv; navigate('date'); }
+                    break;
+                case 'submit-request':
+                    state.reservations.unshift({
+                        id: 'REQ' + Date.now(), status: 'requesting', 
+                        store: state.draft.store, vehicle: state.draft.vehicle, service: state.draft.service, 
+                        date1: state.draft.date1, date2: state.draft.date2, date3: state.draft.date3, comment: state.draft.comment
+                    });
+                    navigate('complete');
+                    break;
+                case 'toggle-terms':
+                    state.ui.termsModalOpen = val === 'open';
+                    render();
+                    break;
+                case 'change-month':
+                    const delta = parseInt(val, 10);
+                    state.calendar.currentMonth += delta;
+                    if(state.calendar.currentMonth > 12) { state.calendar.currentMonth = 1; state.calendar.currentYear++; }
+                    if(state.calendar.currentMonth < 1) { state.calendar.currentMonth = 12; state.calendar.currentYear--; }
+                    render();
+                    break;
+                case 'set-slot':
+                    state.calendar.targetSlot = parseInt(val, 10);
+                    render();
+                    break;
+                case 'open-time-modal':
+                    const day = parseInt(val, 10);
+                    const days = ['日', '月', '火', '水', '木', '金', '土'];
+                    const dow = days[new Date(state.calendar.currentYear, state.calendar.currentMonth - 1, day).getDay()];
+                    state.calendar.selectedDateObj = { 
+                        year: state.calendar.currentYear, month: state.calendar.currentMonth, day: day, 
+                        dateStr: `${state.calendar.currentYear}年${state.calendar.currentMonth}月${day}日 (${dow})` 
+                    };
+                    state.ui.timeModalOpen = true;
+                    render();
+                    break;
+                case 'close-time-modal':
+                    state.ui.timeModalOpen = false;
+                    setTimeout(() => { state.calendar.selectedDateObj = null; render(); }, 300);
+                    render(); // 閉じるアニメーションのため即時描画
+                    break;
+                case 'select-time':
+                    const timeStr = val;
+                    const dateData = { date: state.calendar.selectedDateObj.dateStr, time: timeStr }; 
+                    if(state.calendar.targetSlot === 1) { state.draft.date1 = dateData; state.calendar.targetSlot = 2; } 
+                    else if(state.calendar.targetSlot === 2) { state.draft.date2 = dateData; state.calendar.targetSlot = 3; } 
+                    else if(state.calendar.targetSlot === 3) { state.draft.date3 = dateData; } 
+                    
+                    state.ui.timeModalOpen = false;
+                    setTimeout(() => { state.calendar.selectedDateObj = null; render(); }, 300);
+                    render();
+                    break;
+                case 'scenario':
+                    state.agreedToTerms = true; state.reservations = [];
+                    state.draft = { store: null, vehicle: null, service: null, date1: null, date2: null, date3: null, comment: '' };
+                    if(val === 'line') { navigate('line'); } 
+                    else if (val === 'default') { navigate('top'); } 
+                    else if (val === 'one_car') {
+                        state.reservations = [{
+                            id: 'REQ1', status: 'requesting', store: MOCK_DATA.stores.favorites[0], vehicle: MOCK_DATA.vehicles[0], service: MOCK_DATA.services[0],
+                            date1: { date: '2025年7月10日 (木)', time: '10:00〜' }, date2: { date: '2025年7月10日 (木)', time: '11:00〜' }
+                        }]; navigate('top');
+                    } 
+                    else if (val === 'confirmed') {
+                        state.reservations = [{
+                            id: 'RES999', status: 'confirmed', store: MOCK_DATA.stores.favorites[0], vehicle: MOCK_DATA.vehicles[1], service: MOCK_DATA.services[1],
+                            date1: { date: '2025年7月10日 (木)', time: '10:00〜' }
+                        }]; navigate('top');
+                    }
+                    break;
+            }
+        });
+
+        document.body.addEventListener('input', (e) => {
+            if(e.target.id === 'txt-comment') {
+                state.draft.comment = e.target.value;
+            }
+        });
+
+        document.body.addEventListener('change', (e) => {
+            if(e.target.id === 'chk-terms') {
+                state.agreedToTerms = e.target.checked;
+                render();
+            }
+        });
+
+        const btnToggleDebug = document.getElementById('btn-toggle-debug');
+        if(btnToggleDebug) {
+            btnToggleDebug.addEventListener('click', () => { document.getElementById('debugPanel').classList.toggle('active'); });
+        }
+
+        // =========================================================
+        // 3. レンダリング関数
+        // =========================================================
+        function navigate(view) {
+            const contentArea = document.querySelector('.app-content');
+            if (contentArea) contentArea.scrollTo(0,0);
+            state.view = view;
+            render();
+        }
+
+        function render() {
+            const app = document.getElementById('app');
+            let content = '';
+            
+            if (!['line', 'top'].includes(state.view)) {
+                content += renderHeader();
+            }
+
+            content += `<div class="fade-in flex-1 flex flex-col relative">`; 
+            switch(state.view) {
+                case 'line': content += renderLine(); break;
+                case 'terms': content += renderTerms(); break;
+                case 'top': content += renderTop(); break;
+                case 'store': content += renderStore(); break;
+                case 'vehicle': content += renderVehicle(); break;
+                case 'service': content += renderService(); break;
+                case 'date': content += renderDate(); break;
+                case 'confirm': content += renderConfirm(); break;
+                case 'complete': content += renderComplete(); break;
+            }
+            content += `</div>`;
+            
+            if(state.calendar.selectedDateObj) { content += renderTimeModal(); }
+            if(state.ui.termsModalOpen) { content += renderTermsModalContent(); }
+
+            app.innerHTML = content;
+        }
+
+        function renderHeader() {
+            const titleMap = { terms: '入庫予約', store: '店舗選択', vehicle: '車両選択', service: '入庫種別選択', date: '希望日時選択', confirm: 'リクエスト内容の確認', complete: 'リクエスト完了' };
+            const title = titleMap[state.view] || '';
+            const showBack = ['store', 'vehicle', 'service', 'date', 'confirm'].includes(state.view);
+            const backViewMap = { store: 'top', vehicle: 'store', service: 'vehicle', date: 'service', confirm: 'date' };
+            
+            return `
+                <div class="header px-4 py-3 flex items-center justify-between shrink-0">
+                    <div class="w-8">
+                        ${showBack ? `<button class="js-action text-xl text-gray-500" data-action="navigate" data-val="${backViewMap[state.view]}">‹</button>` : ''}
+                    </div>
+                    <div class="text-center flex-1">
+                        <h1 class="font-bold text-sm tracking-widest">${title}</h1>
+                        <p class="text-[9px] text-gray-400 mt-0.5">https://sample.jp</p>
+                    </div>
+                    <div class="w-8 text-right">
+                        <button class="js-action text-xl text-gray-500" data-action="navigate" data-val="line">✕</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderStepper(step, currentLabel, nextLabel) {
+            const p = Math.round((step / 5) * 100);
+            return `
+                <div class="bg-gray-100 p-3 flex items-center gap-3 border-b border-gray-200 shrink-0">
+                    <div class="stepper-circle bg-white" style="background: conic-gradient(#000 ${p}%, #E5E7EB 0%);">
+                        <div class="bg-white rounded-full w-[30px] h-[30px] flex items-center justify-center">${step}<span class="text-[10px]">/5</span></div>
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-gray-500 mb-0.5">▶︎ ${nextLabel}</div>
+                        <div class="font-bold text-sm">${currentLabel}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- LINE画面 ---
+        function renderLine() {
+            return `
+                <div class="flex-1 flex flex-col bg-[#86afcb]">
+                    <div class="bg-[#353a40] text-white p-3 pt-8 shrink-0 flex justify-between items-center">
+                        <div class="flex gap-2 items-center"><span class="text-xl">‹</span><span class="font-bold text-sm">トヨタモビリティ東京 高井戸北陸橋店</span></div><span>≡</span>
+                    </div>
+                    <div class="flex-1 p-4 flex flex-col gap-4 mt-4 overflow-y-auto pb-10">
+                        <div class="text-center"><span class="bg-black/20 text-white text-xs px-3 py-1 rounded-full">今日</span></div>
+                        <div class="flex gap-2 items-start">
+                            <div class="w-10 h-10 rounded-full bg-white shrink-0"><img src="https://images.unsplash.com/photo-1542362567-b07e54358753?w=100" class="w-full h-full object-cover rounded-full"></div>
+                            <div class="bg-white rounded-2xl rounded-tl-none p-3 max-w-[260px] shadow-sm">
+                                <p class="text-xs leading-relaxed mb-3">
+                                    いつもご利用ありがとうございます。<br>
+                                    お客様のお車の『12ヶ月定期点検』の時期が近づいてまいりました。<br><br>
+                                    WEBから簡単に予約・空き状況の確認が可能です。下記ボタンよりご予約をお願いいたします。
+                                </p>
+                                <button class="js-action w-full bg-[#00B900] text-white font-bold py-2.5 rounded-lg text-sm shadow hover:bg-green-600 transition-colors" data-action="navigate" data-val="terms">WEB入庫予約はこちら</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- 利用規約画面 ---
+        function renderTerms() {
+            return `
+                <div class="p-5 flex-1 bg-white">
+                    <h2 class="text-base font-bold mb-4 mt-2">利用規約への同意のお願い</h2>
+                    <p class="text-[11px] text-gray-600 mb-6 leading-relaxed">入庫予約サービスのご利用にあたり、本サービスの利用規約、トヨタモビリティ東京の定めるプライバシーポリシーのご確認をお願いいたします。<br>同意後、「同意して続ける」ボタンをクリックして本サービスをご利用ください。</p>
+                    <button class="js-action w-full border border-gray-300 rounded p-4 mb-6 bg-white flex justify-between items-center hover:bg-gray-50 text-left shadow-sm transition-colors" data-action="toggle-terms" data-val="open">
+                        <span class="text-sm font-bold text-black">利用規約</span><span class="text-gray-400 text-xl">❐</span>
+                    </button>
+                    <label class="flex items-center gap-3 mb-10 cursor-pointer bg-white p-4 border border-gray-200 rounded shadow-sm">
+                        <input type="checkbox" id="chk-terms" class="custom-checkbox shrink-0" ${state.agreedToTerms ? 'checked' : ''}>
+                        <span class="text-sm font-bold">利用規約に同意する</span>
+                    </label>
+                    <button class="js-action w-full py-4 text-white font-bold rounded mb-3 shadow-md transition-colors ${state.agreedToTerms ? 'bg-black hover:bg-gray-800' : 'bg-gray-300 pointer-events-none'}" data-action="navigate" data-val="top" ${state.agreedToTerms ? '' : 'disabled'}>同意して続ける</button>
+                    <button class="js-action w-full py-4 bg-white border border-gray-300 text-black font-bold rounded hover:bg-gray-50 transition-colors" data-action="navigate" data-val="line">同意しない（終了する）</button>
+                </div>
+            `;
+        }
+
+        function renderTermsModalContent() {
+            const isOpen = state.ui.termsModalOpen ? 'open' : '';
+            return `
+                <div class="full-modal ${isOpen}">
+                    <div class="header px-4 py-3 flex items-center justify-between border-b bg-white shadow-sm shrink-0">
+                        <div class="w-8"></div>
+                        <h2 class="font-bold text-sm tracking-widest text-center flex-1">入庫予約サービス利用規約</h2>
+                        <button class="js-action w-8 text-2xl text-gray-400 text-right hover:text-black" data-action="toggle-terms" data-val="close">×</button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-5 bg-white text-[11px] leading-relaxed text-gray-700 whitespace-pre-line pb-10">【利用規約本文がここに入ります】</div>
+                </div>
+            `;
+        }
+
+        // --- TOP画面 ---
+        function renderTop() {
+            let html = `
+                <div class="bg-white flex-1 flex flex-col">
+                    <div class="px-5 pt-8 pb-8 bg-gray-50 shrink-0">
+                        <h2 class="text-xl font-bold mb-4">入庫予約</h2>
+                        <p class="text-xs text-gray-600 mb-6 leading-relaxed">お客さまのご都合に合わせて、いつでも車両の点検・整備に関する入庫予約をリクエストできます。</p>
+                        <button class="js-action w-full bg-black text-white font-bold py-3.5 rounded text-sm shadow hover:bg-gray-800 transition-colors" data-action="start-reserve">入庫予約を始める</button>
+                    </div>
+                    <div class="flex-1 px-5 pt-8 pb-10">
+                        <h3 class="font-bold text-base border-b-2 border-black pb-2 mb-6">予約一覧</h3>
+            `;
+            if (state.reservations.length === 0) {
+                html += `<div class="text-center py-10 bg-gray-50 rounded border border-gray-200"><p class="text-sm font-bold text-gray-800 mb-4">予約している車両はありません</p><img src="https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=400&q=80" class="w-32 h-20 object-cover mx-auto rounded opacity-30 grayscale"></div>`;
+            } else {
+                state.reservations.forEach(res => {
+                    const isReq = res.status === 'requesting';
+                    const badgeClass = isReq ? 'bg-black text-white' : 'bg-toyota-red text-white';
+                    const badgeText = isReq ? 'リクエスト中' : '予約確定';
+                    html += `
+                        <div class="border border-gray-300 rounded mb-6 p-4 shadow-sm bg-white relative">
+                            <span class="absolute top-4 left-4 ${badgeClass} text-[10px] px-2 py-1 rounded font-bold">${badgeText}</span>
+                            <div class="mt-8 flex justify-between items-start">
+                                <div>
+                                    <h4 class="font-bold text-lg leading-tight mb-1">${res.vehicle.name}</h4>
+                                    <p class="text-[10px] text-gray-500 mb-3">${res.vehicle.type || ''}</p>
+                                    <p class="text-xs text-gray-600 mb-1"><span class="w-16 inline-block text-gray-400">車検満了日</span> ${res.vehicle.expire}</p>
+                                    <p class="text-xs text-gray-600"><span class="w-16 inline-block text-gray-400">車台番号</span> ${res.vehicle.chassis}</p>
+                                </div>
+                                <img src="${res.vehicle.img}" class="w-24 h-16 object-cover rounded border border-gray-100">
+                            </div>
+                            <details class="group mt-5 border-t border-gray-200 pt-1" open>
+                                <summary class="font-bold text-sm py-3 flex justify-between items-center cursor-pointer outline-none">次回のメンテナンス<span class="transform group-open:rotate-180 transition-transform text-gray-400 text-lg leading-none">^</span></summary>
+                                <div class="bg-gray-50 p-4 rounded border border-gray-100 mt-1">
+                                    <p class="font-bold text-[15px] text-toyota-red mb-1">${res.service.name}</p>
+                                    ${isReq ? `<p class="text-[10px] text-gray-500 mb-4">※予約はまだ確定していません。</p>` : `<p class="text-xs text-black font-bold mb-4">${res.date1.date} ${res.date1.time}</p>`}
+                                    <div class="grid grid-cols-[60px_1fr] gap-y-2 text-xs text-gray-700">
+                                        <div class="text-gray-400">店舗名</div><div>${res.store.company}<br>${res.store.name}</div>
+                                        <div class="text-gray-400 mt-2">申込み内容</div><div class="mt-2">${res.service.name}</div>
+                                        ${isReq ? `
+                                        <div class="text-gray-400 mt-2">第一候補</div><div class="mt-2">${res.date1 ? res.date1.date + ' ' + res.date1.time : ''}</div>
+                                        <div class="text-gray-400">第二候補</div><div>${res.date2 ? res.date2.date + ' ' + res.date2.time : '未選択'}</div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </details>
+                            <button class="js-action w-full py-2.5 mt-4 border border-black rounded text-xs font-bold bg-white text-black hover:bg-gray-50 transition-colors" data-action="cancel-reservation" data-val="${res.id}">キャンセル</button>
+                        </div>
+                    `;
+                });
+            }
+            html += `
+                    </div>
+                </div>
+                <!-- 追従(Sticky) フッター -->
+                <div class="sticky-footer flex justify-center">
+                    <button class="js-action w-full bg-black text-white font-bold py-3.5 rounded text-[13px] hover:bg-gray-800 transition-colors" data-action="start-reserve">新規入庫予約</button>
+                </div>
+            `;
+            return html;
+        }
+
+        // --- 店舗選択画面 ---
+        function renderStore() {
+            let html = renderStepper(1, '店舗選択', '車両の選択');
+            html += `<div class="p-5 bg-white flex-1"><h3 class="font-bold mb-6 text-[15px]">よく利用する店舗</h3>`;
+            MOCK_DATA.stores.favorites.forEach(s => {
+                html += `
+                    <div class="border border-gray-200 rounded mb-6 overflow-hidden shadow-sm">
+                        <div class="flex justify-between items-start p-4 bg-white">
+                            <img src="${s.img}" class="w-[84px] h-[64px] object-cover rounded border border-gray-100">
+                            <div class="flex-1 ml-3">
+                                <p class="text-[10px] text-gray-500 mb-0.5">${s.company}</p>
+                                <p class="font-bold text-sm leading-tight">${s.name}</p>
+                            </div>
+                        </div>
+                        <div class="px-4 pb-4">
+                            <button class="js-action w-full bg-black text-white font-bold py-3 text-sm rounded cursor-pointer hover:bg-gray-800 transition-colors" data-action="select-store" data-val="${s.id}">こちらの店舗で予約する</button>
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            html += `
+                <div class="sticky-footer flex justify-center">
+                    <button class="js-action w-full bg-white border border-gray-300 text-black font-bold py-3.5 text-[13px] rounded hover:bg-gray-50 transition-colors" data-action="navigate" data-val="top">戻る</button>
+                </div>
+            `;
+            return html;
+        }
+
+        function renderVehicle() {
+            let html = renderStepper(2, '車両選択', '入庫内容の選択');
+            html += `<div class="p-5 bg-white flex-1">`;
+            if(!state.draft.vehicle) state.draft.vehicle = MOCK_DATA.vehicles[0];
+            MOCK_DATA.vehicles.forEach(v => {
+                const isSelected = state.draft.vehicle && state.draft.vehicle.id === v.id;
+                html += `
+                    <div class="js-action border ${isSelected ? 'border-black bg-gray-50 shadow-md' : 'border-gray-200 shadow-sm'} rounded mb-5 p-4 relative cursor-pointer transition-colors" data-action="select-vehicle" data-val="${v.id}">
+                        <div class="flex gap-2 items-start mb-2">
+                            <input type="radio" class="custom-radio shrink-0 mt-1" ${isSelected ? 'checked' : ''}>
+                            <div class="flex-1">
+                                <div class="flex justify-between items-start">
+                                    <div><h4 class="font-bold text-lg">${v.name}</h4><p class="text-[10px] text-gray-500">${v.type || ''}</p></div>
+                                    <img src="${v.img}" class="w-24 h-16 object-cover rounded border border-gray-100">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-xs text-gray-600 grid grid-cols-[60px_1fr] gap-1 mb-2 pl-7 mt-2">
+                            <div class="text-gray-400">ナンバー</div><div>${v.plate}</div>
+                            <div class="text-gray-400">車台番号</div><div>${v.chassis}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            html += `
+                <div class="sticky-footer flex flex-col gap-2">
+                    <button class="js-action w-full bg-black text-white font-bold py-3.5 text-sm rounded shadow-md hover:bg-gray-800 transition-colors" data-action="navigate" data-val="service">次へ</button>
+                    <button class="js-action w-full bg-white border border-gray-300 text-black font-bold py-3.5 text-sm rounded hover:bg-gray-50 transition-colors" data-action="navigate" data-val="store">戻る</button>
+                </div>
+            `;
+            return html;
+        }
+
+        function renderService() {
+            let html = renderStepper(3, '入庫種別選択', '希望日時の選択');
+            html += `<div class="p-5 bg-white flex-1"><h3 class="font-bold mb-4 text-sm">入庫種別を選択</h3>`;
+            MOCK_DATA.services.forEach(srv => {
+                html += `<div class="js-action border border-gray-200 rounded mb-3 overflow-hidden cursor-pointer shadow-sm active:bg-gray-50 hover:border-black transition-colors" data-action="select-service" data-val="${srv.id}">
+                            <div class="p-4 flex items-center gap-3"><div class="flex-1"><p class="font-bold text-sm flex items-center gap-2">${srv.name}</p><p class="text-[10px] text-gray-500 mt-1">所要時間 <span class="font-bold text-black">${srv.time}</span></p></div></div>
+                        </div>`;
+            });
+            html += `</div>`;
+            html += `
+                <div class="sticky-footer flex justify-center">
+                    <button class="js-action w-full bg-white border border-gray-300 text-black font-bold py-3.5 text-[13px] rounded hover:bg-gray-50 transition-colors" data-action="navigate" data-val="vehicle">戻る</button>
+                </div>
+            `;
+            return html;
+        }
+
+        function renderDate() {
+            let html = renderStepper(4, '希望日時選択', 'リクエスト完了');
+            html += `<div class="p-5 bg-white flex-1">`;
+            const renderSlot = (num, data, required) => `
+                <div class="js-action border ${state.calendar.targetSlot === num ? 'border-toyota-red bg-red-50 ring-1 ring-toyota-red' : (data ? 'border-gray-400 bg-white' : 'border-gray-200')} rounded p-3 mb-3 flex items-center cursor-pointer transition-colors" data-action="set-slot" data-val="${num}">
+                    <span class="${state.calendar.targetSlot === num ? 'text-toyota-red' : (data ? 'text-black' : 'text-gray-500')} font-bold text-sm w-16">第${num}候補</span>
+                    ${required ? `<span class="text-[10px] px-1 border ${state.calendar.targetSlot === num ? 'border-toyota-red text-toyota-red bg-white' : 'border-gray-400 text-gray-400'} rounded mr-3">必須</span>` : '<span class="text-[10px] px-1 border border-gray-400 text-gray-400 bg-gray-100 rounded mr-3">任意</span>'}
+                    <span class="text-sm font-bold flex-1 text-right ${data ? 'text-black' : 'text-gray-400'}">${data ? `${data.date} ${data.time}` : '未選択'}</span>
+                </div>
+            `;
+            html += renderSlot(1, state.draft.date1, true); html += renderSlot(2, state.draft.date2, true); html += renderSlot(3, state.draft.date3, false);
+            html += `<div class="flex justify-between items-center mb-4 mt-6 px-2"><button class="js-action text-gray-400 text-xl font-bold p-2 hover:text-black" data-action="change-month" data-val="-1">‹</button><h3 class="font-bold text-lg">${state.calendar.currentYear}年 ${state.calendar.currentMonth}月</h3><button class="js-action text-gray-400 text-xl font-bold p-2 hover:text-black" data-action="change-month" data-val="1">›</button></div>`;
+            
+            const firstDay = new Date(state.calendar.currentYear, state.calendar.currentMonth - 1, 1).getDay();
+            const lastDate = new Date(state.calendar.currentYear, state.calendar.currentMonth, 0).getDate();
+            html += `<table class="w-full text-center text-sm table-fixed border-collapse"><thead><tr class="text-gray-500 text-xs border-b border-gray-200"><th class="text-red-500 pb-2">日</th><th class="pb-2">月</th><th class="pb-2">火</th><th class="pb-2">水</th><th class="pb-2">木</th><th class="pb-2">金</th><th class="text-blue-500 pb-2">土</th></tr></thead><tbody><tr>`;
+            let dayCount = 1;
+            for (let i = 0; i < 42; i++) {
+                if (i % 7 === 0 && i !== 0) html += `</tr><tr>`;
+                if (i < firstDay || dayCount > lastDate) { html += `<td class="calendar-cell"></td>`; } else {
+                    const isClosed = (i % 7 === 1 || i % 7 === 2); 
+                    let statusHtml = ''; let cellClass = "calendar-cell"; let clickData = '';
+                    if(isClosed) { 
+                        statusHtml = `<span class="text-gray-300">×</span>`; 
+                    } else {
+                        statusHtml = `<span class="text-blue-600 font-bold">◯</span>`; 
+                        cellClass += " selectable hover:bg-gray-50 transition-colors js-action"; 
+                        clickData = `data-action="open-time-modal" data-val="${dayCount}"`;
+                    }
+                    html += `<td class="${cellClass}" ${clickData}><div class="text-xs mb-1">${dayCount}</div><div class="text-[14px]">${statusHtml}</div></td>`;
+                    dayCount++;
+                }
+            }
+            html += `</tbody></table></div>`;
+            html += `
+                <div class="sticky-footer flex flex-col gap-2">
+                    <button class="js-action w-full py-3.5 text-white font-bold rounded shadow-md transition-colors ${state.draft.date1 && state.draft.date2 ? 'bg-black hover:bg-gray-800' : 'bg-gray-300 pointer-events-none'}" data-action="navigate" data-val="confirm">リクエストに進む</button>
+                    <button class="js-action w-full bg-white border border-gray-300 text-black font-bold py-3.5 text-[13px] rounded hover:bg-gray-50" data-action="navigate" data-val="service">戻る</button>
+                </div>
+            `;
+            return html;
+        }
+
+        function renderTimeModal() {
+            const times = ['10:00〜', '10:30〜', '11:00〜', '13:00〜', '14:00〜'];
+            const isOpen = state.ui.timeModalOpen ? 'open' : '';
+            let html = `
+                <div class="modal-overlay">
+                    <div class="flex-1 js-action" data-action="close-time-modal"></div>
+                    <div class="bottom-sheet ${isOpen} p-5 shadow-2xl">
+                        <div class="flex justify-between items-center mb-4 border-b pb-3 shrink-0">
+                            <span class="font-bold text-sm bg-gray-100 px-3 py-1 rounded">第${state.calendar.targetSlot}候補</span>
+                            <span class="font-bold text-base">${state.calendar.selectedDateObj.dateStr}</span>
+                            <button class="js-action text-2xl text-gray-400 w-8 text-right hover:text-black" data-action="close-time-modal">×</button>
+                        </div>
+                        <div class="overflow-y-auto flex-1 space-y-2 mb-2 pb-5">
+            `;
+            times.forEach(t => { 
+                html += `<div class="js-action border border-gray-200 rounded p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors" data-action="select-time" data-val="${t}"><span class="font-bold text-sm">${t}</span><span class="text-blue-600 font-bold">◯</span></div>`; 
+            });
+            html += `</div></div></div>`; 
+            return html;
+        }
+
+        function renderConfirm() {
+            const d = state.draft;
+            return `
+                <div class="p-5 bg-white flex-1">
+                    <h2 class="font-bold text-base mb-6 text-center">リクエスト内容の確認</h2>
+                    <div class="border border-gray-200 p-4 mb-4 rounded shadow-sm">
+                        <h3 class="font-bold text-sm mb-3 border-b border-gray-100 pb-2">実施店舗</h3>
+                        <div class="flex items-center gap-3 mb-3">
+                            <img src="${d.store.img}" class="w-16 h-12 object-cover rounded border border-gray-100">
+                            <div><p class="text-[10px] text-gray-500">${d.store.company}</p><p class="font-bold text-sm">${d.store.name}</p></div>
+                        </div>
+                    </div>
+                    <div class="border border-gray-200 p-4 mb-4 rounded shadow-sm">
+                        <h3 class="font-bold text-sm mb-3 border-b border-gray-100 pb-2">車両</h3>
+                        <p class="font-bold text-base mb-1">${d.vehicle.name}</p>
+                        <p class="text-[11px] text-gray-600 mb-2">ナンバー: ${d.vehicle.plate}</p>
+                    </div>
+                    <div class="border border-gray-200 p-4 mb-4 rounded shadow-sm">
+                        <h3 class="font-bold text-sm mb-3 border-b border-gray-100 pb-2">メンテナンス内容</h3>
+                        <p class="font-bold text-base text-toyota-red mb-1">${d.service.name}</p>
+                        <p class="text-[11px] text-gray-600">所要時間: ${d.service.time}</p>
+                    </div>
+                    <div class="border border-gray-200 p-4 mb-4 rounded shadow-sm">
+                        <h3 class="font-bold text-sm mb-3 border-b border-gray-100 pb-2">リクエスト日時</h3>
+                        <div class="grid grid-cols-[60px_1fr] gap-2 text-xs text-gray-700">
+                            <div class="text-gray-400">第1候補</div><div class="font-bold text-black">${d.date1.date} ${d.date1.time}</div>
+                            <div class="text-gray-400">第2候補</div><div class="font-bold text-black">${d.date2 ? d.date2.date + ' ' + d.date2.time : '未選択'}</div>
+                        </div>
+                    </div>
+                    <div class="border border-gray-200 p-4 mb-6 rounded shadow-sm">
+                        <h3 class="font-bold text-sm mb-3 border-b border-gray-100 pb-2">ご要望・ご相談事項</h3>
+                        <textarea id="txt-comment" class="w-full border border-gray-300 rounded p-3 text-sm h-24 bg-gray-50 outline-none focus:border-black" placeholder="ご要望やご相談したい事項があればご記入ください。">${d.comment}</textarea>
+                    </div>
+                </div>
+                <div class="sticky-footer flex flex-col gap-2">
+                    <button class="js-action w-full py-3.5 bg-black text-white font-bold rounded shadow-md text-sm hover:bg-gray-800 transition-colors" data-action="submit-request">リクエストを送信する</button>
+                    <button class="js-action w-full py-3.5 bg-white border border-gray-300 text-black font-bold rounded text-sm hover:bg-gray-50 transition-colors" data-action="navigate" data-val="date">戻る</button>
+                </div>
+            `;
+        }
+
+        function renderComplete() { 
+            return `
+                <div class="p-6 text-center flex-1 bg-white flex flex-col justify-center">
+                    <div class="w-16 h-16 rounded-full bg-green-50 text-green-500 flex items-center justify-center text-3xl mx-auto mb-6">✓</div>
+                    <h2 class="text-base font-bold mb-4 tracking-wider">予約リクエストを受け付けました</h2>
+                    <button class="js-action w-full py-4 bg-black text-white font-bold rounded shadow-md mt-6 hover:bg-gray-800 transition-colors" data-action="navigate" data-val="top">トップへ戻る</button>
+                </div>
+            `; 
+        }
+
+        // 初期化
+        render();
+
+    </script>
+</body>
+</html>
