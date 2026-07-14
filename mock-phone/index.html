@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>クラウド電話基盤デモ (TMC標準仕様)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans JP', sans-serif; background-color: #f8fafc; }
+        .bg-toyota-navy { background-color: #003377; }
+        .text-toyota-navy { color: #003377; }
+        .border-toyota-navy { border-color: #003377; }
+        
+        .bg-toyota-blue { background-color: #0055A5; }
+        .text-toyota-blue { color: #0055A5; }
+
+        .bg-lineworks { background-color: #00B900; }
+        .text-lineworks { color: #00B900; }
+        
+        .popup-slide { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .tab-active { border-bottom: 2px solid #0055A5; color: #0055A5; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+        .chat-bubble-store { background-color: #00B900; color: white; border-radius: 12px 12px 0 12px; }
+        .chat-bubble-customer { background-color: #ffffff; color: #333; border: 1px solid #e2e8f0; border-radius: 12px 12px 12px 0; }
+        .chat-bubble-sms { background-color: #3b82f6; color: white; border-radius: 12px 12px 0 12px; }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-toyota-navy text-white flex flex-col h-full shrink-0 z-20 relative">
+        <div class="p-6">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="w-8 h-8 bg-blue-500 rounded flex items-center justify-center shrink-0">
+                    <span class="text-white font-bold text-xl">C</span>
+                </div>
+                <span class="font-bold text-sm tracking-wide whitespace-nowrap">クラウド電話基盤デモ</span>
+            </div>
+            <div class="text-[10px] text-blue-200 font-mono leading-tight">
+                店舗フロント業務ソリューション<br>
+                次期J / シリエル 連携対応
+            </div>
+        </div>
+        <nav class="flex-1 px-4 space-y-2 mt-2">
+            <button id="nav-home" onclick="showView('home')" class="w-full flex items-center gap-4 px-4 py-3 rounded-lg bg-toyota-blue text-white transition-colors">
+                <span>ホーム</span>
+            </button>
+            <button id="nav-history" onclick="showView('history')" class="w-full flex items-center gap-4 px-4 py-3 rounded-lg text-gray-400 hover:bg-white/10 hover:text-white transition-colors">
+                <span>会話履歴 (カスハラ検知)</span>
+            </button>
+            <button id="nav-customers" onclick="showView('customers')" class="w-full flex items-center gap-4 px-4 py-3 rounded-lg text-gray-400 hover:bg-white/10 hover:text-white transition-colors">
+                <span>顧客管理 (次期J連携)</span>
+            </button>
+            <button id="nav-sms" onclick="showView('sms')" class="w-full flex items-center gap-4 px-4 py-3 rounded-lg text-gray-400 hover:bg-white/10 hover:text-white transition-colors">
+                <span>メッセージ統合管理</span>
+            </button>
+        </nav>
+        <div class="p-6 border-t border-white/10">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center font-bold">山</div>
+                <div>
+                    <p class="text-sm font-bold">山田 一郎</p>
+                    <p class="text-[10px] text-blue-200">名駅店 / 営業</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main id="main-area" class="flex-1 flex flex-col bg-white overflow-hidden relative">
+        
+        <!-- View: Home -->
+        <div id="view-home" class="view flex-1 flex flex-col bg-slate-50 overflow-y-auto custom-scrollbar p-8">
+            <div class="flex items-center justify-between mb-8">
+                <div>
+                    <h2 class="text-2xl font-bold text-toyota-navy mb-1">本日の業務ダッシュボード</h2>
+                    <p class="text-sm text-slate-500">店舗待機中... 着信があると右下にポップアップが表示されます</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-6xl">
+                <!-- 左カラム: 折り返しリマインド & アラート -->
+                <div class="space-y-6">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="bg-red-50 border-b border-red-100 p-4 flex justify-between items-center">
+                            <h3 class="font-bold text-red-700 flex items-center gap-2">
+                                <span class="text-lg">⚠️</span> 緊急・折り返しリマインド
+                            </h3>
+                            <span class="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold shadow-sm">未対応 2件</span>
+                        </div>
+                        <div class="p-0">
+                            <div class="border-b border-slate-100 p-4 hover:bg-slate-50 transition-colors cursor-pointer" onclick="openDetail('C003', 'calls')">
+                                <div class="flex justify-between items-start mb-2">
+                                    <p class="font-bold text-sm text-toyota-blue">佐藤 浩司 様 (ヤリス)</p>
+                                    <span class="text-xs font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded border border-red-200">期限: 本日午前中</span>
+                                </div>
+                                <p class="text-xs text-slate-600 mb-2 font-medium">【シリエル抽出】店長へエスカレーション・即時折り返し (洗車不備に対するお怒り)</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-bold">山田 一郎</span>
+                                </div>
+                            </div>
+                            <div class="p-4 hover:bg-slate-50 transition-colors cursor-pointer" onclick="openDetail('C006', 'calls')">
+                                <div class="flex justify-between items-start mb-2">
+                                    <p class="font-bold text-sm text-toyota-blue">渡辺 真理 様 (ハリアー)</p>
+                                    <span class="text-xs font-bold text-orange-600 bg-orange-100 px-2 py-0.5 rounded border border-orange-200">期限: 15:00</span>
+                                </div>
+                                <p class="text-xs text-slate-600 mb-2 font-medium">【シリエル抽出】残価設定ローン買い取り目安の算出後、営業より折り返し</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-bold">山田 一郎</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右カラム: 次回アクション (ToDo) -->
+                <div class="space-y-6">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="bg-blue-50 border-b border-blue-100 p-4 flex justify-between items-center">
+                            <h3 class="font-bold text-toyota-blue flex items-center gap-2">
+                                <span class="text-lg">📋</span> 次回アクション (シリエル連携)
+                            </h3>
+                            <span class="bg-toyota-blue text-white text-[10px] px-2 py-0.5 rounded-full font-bold shadow-sm">未着手 3件</span>
+                        </div>
+                        <div class="p-0">
+                            <div class="border-b border-slate-100 p-4 hover:bg-slate-50 transition-colors cursor-pointer" onclick="openDetail('C010', 'calls')">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-xs font-bold text-slate-400">入庫時の写真確認</span>
+                                    <input type="checkbox" class="w-4 h-4 rounded text-toyota-blue focus:ring-toyota-blue">
+                                </div>
+                                <p class="text-sm font-bold text-slate-700 mt-1">池田 大地 様 (タフト)</p>
+                                <p class="text-[10px] text-slate-500 mt-1">ボディ傷のクレーム対応に向けた事前確認</p>
+                            </div>
+                            <div class="border-b border-slate-100 p-4 hover:bg-slate-50 transition-colors cursor-pointer" onclick="openDetail('C001', 'calls')">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-xs font-bold text-slate-400">土曜午後の試乗車(クラウン)手配</span>
+                                    <input type="checkbox" class="w-4 h-4 rounded text-toyota-blue focus:ring-toyota-blue">
+                                </div>
+                                <p class="text-sm font-bold text-slate-700 mt-1">豊田 健一 様 (クラウン)</p>
+                                <p class="text-[10px] text-slate-500 mt-1">代替検討中、試乗案内のための車両確保</p>
+                            </div>
+                            <div class="p-4 hover:bg-slate-50 transition-colors cursor-pointer" onclick="openDetail('C004', 'calls')">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-xs font-bold text-slate-400">引き取り担当者の手配</span>
+                                    <input type="checkbox" class="w-4 h-4 rounded text-toyota-blue focus:ring-toyota-blue">
+                                </div>
+                                <p class="text-sm font-bold text-slate-700 mt-1">高橋 陽子 様 (タント・法人)</p>
+                                <p class="text-[10px] text-slate-500 mt-1">来週水曜日午前中の引き取り手配</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 着信テストボタン群 (画面下部固定ではなく、コンテンツとして下部に配置) -->
+            <div class="mt-12 pt-8 border-t border-slate-200">
+                <p class="text-xs font-bold text-slate-400 mb-4 uppercase tracking-widest">デモ用コントロール</p>
+                <div class="flex flex-wrap gap-4">
+                    <button onclick="triggerCall('C001')" class="bg-white border border-slate-300 text-slate-600 px-5 py-2.5 rounded-xl text-xs shadow-sm hover:bg-slate-100 transition-all font-bold flex items-center gap-2">📞 着信テスト (通常・豊田様)</button>
+                    <button onclick="triggerCall('C003')" class="bg-white border border-red-300 text-red-600 px-5 py-2.5 rounded-xl text-xs shadow-sm hover:bg-red-50 transition-all font-bold flex items-center gap-2">⚠️ 着信テスト (カスハラ・佐藤様)</button>
+                    <button onclick="triggerCall('C010')" class="bg-white border border-orange-300 text-orange-600 px-5 py-2.5 rounded-xl text-xs shadow-sm hover:bg-orange-50 transition-all font-bold flex items-center gap-2">⚠️ 着信テスト (カスハラ・池田様)</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: History -->
+        <div id="view-history" class="view hidden flex-1 flex flex-col overflow-hidden">
+            <div class="h-16 border-b px-6 flex items-center justify-between shrink-0 bg-white">
+                <h2 class="font-bold text-lg text-toyota-navy">全通話録音・分析履歴</h2>
+                <div class="flex gap-2">
+                    <span class="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center">シリエル分析稼働中: 正常</span>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-6 bg-slate-50">
+                <table class="w-full text-left border-collapse bg-white shadow-sm rounded-lg overflow-hidden">
+                    <thead>
+                        <tr class="text-[10px] text-slate-500 uppercase border-b bg-slate-100">
+                            <th class="py-3 px-4 font-bold">区分/連携</th>
+                            <th class="py-3 px-4 font-bold">日時</th>
+                            <th class="py-3 px-4 font-bold">顧客情報</th>
+                            <th class="py-3 px-4 font-bold">シリエル要約 / アラート</th>
+                            <th class="py-3 px-4 text-right font-bold">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-list"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- View: Customers -->
+        <div id="view-customers" class="view hidden flex-1 flex flex-col overflow-hidden">
+            <div class="h-16 border-b px-6 flex items-center justify-between shrink-0 bg-white">
+                <div class="flex items-center gap-3">
+                    <h2 class="font-bold text-lg text-toyota-navy">顧客管理</h2>
+                    <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-[10px] font-bold border border-slate-200">次期J DB 同期済</span>
+                </div>
+                <div class="flex gap-4 items-center">
+                    <input type="text" placeholder="次期Jデータ検索..." class="pl-4 pr-4 py-2 border rounded-lg text-sm w-64 focus:outline-none focus:border-toyota-blue bg-slate-50">
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-6 bg-slate-50">
+                <table class="w-full text-left border-collapse bg-white shadow-sm rounded-lg overflow-hidden">
+                    <thead>
+                        <tr class="text-[10px] text-slate-500 uppercase border-b bg-slate-100">
+                            <th class="py-3 px-4 font-bold">顧客ID / 名前</th>
+                            <th class="py-3 px-4 font-bold">電話番号</th>
+                            <th class="py-3 px-4 font-bold">保有車両 (次期J連携)</th>
+                            <th class="py-3 px-4 font-bold">アラート・属性</th>
+                        </tr>
+                    </thead>
+                    <tbody id="customers-list"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- View: SMS / ToyoTalk Dashboard (2-Pane UI) -->
+        <div id="view-sms" class="view hidden flex-1 flex flex-col overflow-hidden bg-white">
+            <div class="h-16 border-b px-6 flex items-center justify-between shrink-0 bg-white">
+                <h2 class="font-bold text-lg text-toyota-navy">メッセージ統合管理 (トヨトーク / SMS)</h2>
+                <div class="flex gap-2">
+                    <button class="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg text-sm font-bold shadow-sm border border-slate-200 hover:bg-slate-200 transition-colors">✉️ 一斉送信</button>
+                    <button class="bg-toyota-blue text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-800 transition-colors">＋ 新規メッセージ</button>
+                </div>
+            </div>
+            <div class="flex-1 flex overflow-hidden">
+                <!-- 左ペイン: スレッドリスト -->
+                <div class="w-80 border-r bg-white flex flex-col shrink-0">
+                    <div class="p-3 border-b bg-slate-50">
+                        <input type="text" placeholder="お客様名で検索..." class="w-full border rounded-lg p-2 text-sm focus:outline-none focus:border-toyota-blue">
+                    </div>
+                    <div class="flex-1 overflow-y-auto custom-scrollbar" id="integration-chat-list">
+                        <!-- JSでレンダリング -->
+                    </div>
+                </div>
+                <!-- 右ペイン: チャット画面 -->
+                <div class="flex-1 flex flex-col bg-slate-100 relative" id="integration-chat-area">
+                    <!-- 初期状態 -->
+                    <div class="flex-1 flex items-center justify-center text-slate-400 text-sm flex-col">
+                        <div class="text-4xl mb-3">💬</div>
+                        左側からお客様を選択してメッセージを確認してください
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Detail -->
+        <div id="view-detail" class="view hidden flex-1 flex flex-col overflow-hidden bg-white z-10 absolute inset-0">
+            <div class="h-16 border-b px-6 flex items-center justify-between bg-white shrink-0 shadow-sm">
+                <div class="flex items-center gap-4">
+                    <button onclick="showView(currentPreviousView)" class="text-slate-400 hover:text-toyota-navy text-xl font-bold transition-colors">✕</button>
+                    <h2 class="font-bold text-lg text-toyota-navy flex items-center gap-2">
+                        顧客統合ビュー <span class="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold border border-blue-200">次期J 連携済</span>
+                    </h2>
+                </div>
+                <div class="flex gap-2">
+                    <button class="bg-toyota-blue text-white px-6 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-800 transition-colors">📞 発信</button>
+                </div>
+            </div>
+            <div class="flex-1 flex overflow-hidden">
+                <!-- Summary (Left) -->
+                <div class="w-80 border-r bg-slate-50 p-6 overflow-y-auto custom-scrollbar shrink-0">
+                    <div class="text-center mb-6">
+                        <div id="detail-icon" class="w-16 h-16 bg-white text-toyota-navy border-2 border-toyota-navy rounded-full flex items-center justify-center mx-auto mb-2 text-2xl font-bold shadow-sm"></div>
+                        <h3 id="detail-name" class="font-bold text-lg text-toyota-navy"></h3>
+                        <p id="detail-kana" class="text-xs text-slate-500 mt-1"></p>
+                    </div>
+                    <div class="space-y-5 text-xs">
+                        <div>
+                            <p class="text-slate-400 font-bold uppercase tracking-widest text-[10px] mb-1">電話番号</p>
+                            <p id="detail-phone" class="font-bold text-sm text-slate-800"></p>
+                        </div>
+                        <div>
+                            <p class="text-slate-400 font-bold uppercase tracking-widest text-[10px] mb-1">住所</p>
+                            <p id="detail-address" class="text-slate-700"></p>
+                        </div>
+                        <div>
+                            <p class="flex items-center gap-2 text-slate-400 font-bold uppercase tracking-widest text-[10px] mb-1">
+                                重要メモ <span class="bg-white border text-gray-500 px-1 py-0.5 rounded text-[8px]">次期J 同期</span>
+                            </p>
+                            <p id="detail-memo" class="mt-1 p-2.5 bg-red-50 text-red-700 border border-red-200 rounded-lg font-medium leading-relaxed"></p>
+                        </div>
+                        <div>
+                            <p class="text-slate-400 font-bold uppercase tracking-widest text-[10px] mb-1">担当 (名駅店)</p>
+                            <p class="font-bold text-slate-700">山田 一郎</p>
+                        </div>
+                        <div id="detail-tags-container">
+                            <p class="text-slate-400 font-bold uppercase tracking-widest text-[10px] mb-1">アラート・属性</p>
+                            <div id="detail-tags" class="flex flex-wrap gap-1.5 mt-1"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tabs Area (Right) -->
+                <div class="flex-1 flex flex-col overflow-hidden bg-white">
+                    <div class="p-6 border-b grid grid-cols-2 md:grid-cols-4 gap-4 text-xs bg-white shrink-0">
+                        <div><p class="text-slate-400 mb-1 text-[10px] uppercase tracking-widest">保有車両</p><p id="detail-car" class="font-bold text-sm text-slate-800"></p></div>
+                        <div><p class="text-slate-400 mb-1 text-[10px] uppercase tracking-widest">車両ナンバー</p><p id="detail-carreg" class="font-bold text-slate-800"></p></div>
+                        <div><p class="text-slate-400 mb-1 text-[10px] uppercase tracking-widest">車検満了日</p><p id="detail-inspection" class="font-bold text-red-600 text-sm"></p></div>
+                        <div><p class="text-slate-400 mb-1 text-[10px] uppercase tracking-widest">保険満期</p><p id="detail-insurance" class="font-bold text-slate-800"></p></div>
+                    </div>
+                    
+                    <div class="flex border-b bg-slate-50 px-4 shrink-0">
+                        <button id="tab-calls" onclick="switchDetailTab('calls')" class="px-6 py-3 text-sm font-bold tab-active transition-colors">電話・シリエル分析</button>
+                        <button id="tab-chat" onclick="switchDetailTab('chat')" class="px-6 py-3 text-sm font-bold text-slate-400 transition-colors">トヨトーク / SMS</button>
+                        <button id="tab-memos" onclick="switchDetailTab('memos')" class="px-6 py-3 text-sm font-bold text-slate-400 transition-colors">活動履歴・メモ (<span id="memo-count">0</span>)</button>
+                    </div>
+                    
+                    <!-- Tab Contents -->
+                    <div id="detail-calls" class="flex-1 p-6 overflow-y-auto custom-scrollbar space-y-4 bg-slate-50"></div>
+                    <div id="detail-chat" class="hidden flex-1 overflow-y-auto custom-scrollbar bg-slate-100 flex flex-col relative" style="container-type: normal;">
+                        <!-- JSでチャットがレンダリングされる -->
+                    </div>
+                    <div id="detail-memos" class="hidden flex-1 p-6 overflow-y-auto custom-scrollbar space-y-4 bg-slate-50"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Popups (Incoming Call) -->
+        <div id="incoming-popup" class="hidden fixed bottom-8 right-8 w-80 bg-white rounded-2xl shadow-2xl border-2 border-toyota-navy overflow-hidden cursor-pointer popup-slide z-50">
+            <div id="popup-header" class="p-3 text-white flex justify-between items-center bg-toyota-navy">
+                <span class="font-bold text-sm flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span> 店舗着信中
+                </span>
+                <span class="text-xs opacity-80 font-mono">00:04</span>
+            </div>
+            <div class="p-5" id="popup-content"></div>
+            <div class="p-3 bg-slate-50 text-center text-toyota-blue font-bold text-xs border-t hover:bg-blue-50 transition-colors">
+                クリックして次期J連携ビューを開く
+            </div>
+        </div>
+
+        <!-- Audio Player Modal -->
+        <div id="modal-audio" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
+            <div class="bg-white rounded-2xl w-full max-w-md p-8 text-center popup-slide shadow-2xl">
+                <div class="flex justify-between items-center mb-6 border-b pb-3">
+                    <h3 class="font-bold text-lg text-toyota-navy">通話録音再生</h3>
+                    <span class="bg-green-50 text-green-700 text-[10px] px-2 py-1 rounded border border-green-200 font-bold">クラウド保存</span>
+                </div>
+                <div class="h-2 bg-slate-200 w-full mb-8 relative rounded-full overflow-hidden">
+                    <div class="absolute inset-0 w-1/3 bg-toyota-blue rounded-full"></div>
+                </div>
+                <div class="flex justify-center items-center gap-8 mb-8">
+                    <button class="text-slate-400 hover:text-slate-600 font-bold text-xs">15秒戻る</button>
+                    <button class="w-14 h-14 bg-toyota-blue text-white rounded-full text-xl shadow-lg hover:opacity-90 transition-colors pl-1">▶</button>
+                    <button class="text-slate-400 hover:text-slate-600 font-bold text-xs">15秒進む</button>
+                </div>
+                <button onclick="hideModal('audio')" class="bg-slate-100 text-slate-700 px-8 py-2 rounded-lg font-bold text-sm hover:bg-slate-200">閉じる</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // 完全ダミーデータ 10件 (架空の姓名2文字・トヨタ/ダイハツ車のみ)
+        const customers = {
+            'C001': {
+                id: 'C001', name: '豊田 健一', kana: 'トヨダ ケンイチ', phone: '090-0000-0001',
+                address: '東京都〇〇区△△ 1-X', car: 'クラウン CROSSOVER', carReg: '品川 300 あ 00-01',
+                inspectionDue: '2026/05/10', insuranceDue: '2025/05/09 (東京海上)',
+                tags: ['VIP', '代替検討中'], memo: '次回車検前に乗り換え検討。セダンタイプを希望。役員送迎で使用するため代車は同等クラス必須。'
+            },
+            'C002': {
+                id: 'C002', name: '鈴木 美咲', kana: 'スズキ ミサキ', phone: '080-0000-0002',
+                address: '東京都〇〇区△△ 2-X', car: 'アルファード Executive Lounge', carReg: '世田谷 300 い 00-02',
+                inspectionDue: '2026/11/20', insuranceDue: '2026/11/19 (三井住友)',
+                tags: ['ファミリー', '土日入庫'], memo: 'チャイルドシート移設の必要あり。お子様連れのためキッズスペース近くの席へご案内すること。'
+            },
+            'C003': {
+                id: 'C003', name: '佐藤 浩司', kana: 'サトウ コウジ', phone: '070-0000-0003',
+                address: '東京都〇〇区△△ 3-X', car: 'ヤリス HYBRID Z', carReg: '練馬 500 う 00-03',
+                inspectionDue: '2025/08/15', insuranceDue: '2025/08/14 (あいおい)',
+                tags: ['要注意(過去クレーム)'], memo: '前回の点検時、洗車拭き残しで強いご指摘あり。納車時は必ず店長確認を行うこと。言葉遣いに注意。'
+            },
+            'C004': {
+                id: 'C004', name: '高橋 陽子', kana: 'タカハシ ヨウコ', phone: '090-0000-0004',
+                address: '東京都〇〇区△△ 4-X', car: 'タント カスタム', carReg: '足立 500 え 00-04',
+                inspectionDue: '2026/02/14', insuranceDue: '2026/02/13 (損保ジャパン)',
+                tags: ['法人', 'ダイハツ車'], memo: '社用車として利用。点検の連絡は担当の総務部宛にお願いします。'
+            },
+            'C005': {
+                id: 'C005', name: '伊藤 大輔', kana: 'イトウ ダイスケ', phone: '080-0000-0005',
+                address: '東京都〇〇区△△ 5-X', car: 'シエンタ G', carReg: '品川 500 お 00-05',
+                inspectionDue: '2027/09/05', insuranceDue: '2027/09/04 (東京海上)',
+                tags: ['新規', '若年層'], memo: '初めての車購入。操作説明を丁寧に行う必要あり。休日の来店が多い。'
+            },
+            'C006': {
+                id: 'C006', name: '渡辺 真理', kana: 'ワタナベ マリ', phone: '070-0000-0006',
+                address: '東京都〇〇区△△ 6-X', car: 'ハリアー Z', carReg: '練馬 300 か 00-06',
+                inspectionDue: '2025/12/10', insuranceDue: '2025/12/09 (あいおい)',
+                tags: ['車検接近', 'ローン残あり'], memo: '現在残価設定型プラン利用中。次回の車検時に乗り換えか買い取りか相談したいとのこと。'
+            },
+            'C007': {
+                id: 'C007', name: '中村 翔太', kana: 'ナカムラ ショウタ', phone: '090-0000-0007',
+                address: '東京都〇〇区△△ 7-X', car: 'ムーヴ キャンバス', carReg: '世田谷 500 き 00-07',
+                inspectionDue: '2026/03/22', insuranceDue: '2026/03/21 (三井住友)',
+                tags: ['ダイハツ車', 'セカンドカー'], memo: '奥様の買い物用。旦那様は別店舗でクラウンを購入している。対応注意。'
+            },
+            'C008': {
+                id: 'C008', name: '小林 結衣', kana: 'コバヤシ ユイ', phone: '080-0000-0008',
+                address: '東京都〇〇区△△ 8-X', car: 'ライズ Z', carReg: '足立 500 く 00-08',
+                inspectionDue: '2025/11/11', insuranceDue: '2025/11/10 (損保ジャパン)',
+                tags: ['アウトドア趣味'], memo: 'ルーフキャリアの後付けを検討中。部品の適合について次回入庫時に相談予定。'
+            },
+            'C009': {
+                id: 'C009', name: '加藤 翼', kana: 'カトウ ツバサ', phone: '070-0000-0009',
+                address: '東京都〇〇区△△ 9-X', car: 'プリウス PHEV', carReg: '品川 300 け 00-09',
+                inspectionDue: '2027/01/30', insuranceDue: '2027/01/29 (東京海上)',
+                tags: ['エコカー', 'WEB予約メイン'], memo: '電話に出られないことが多いため、基本的に案内はトヨトークかSMSで行うこと。'
+            },
+            'C010': {
+                id: 'C010', name: '池田 大地', kana: 'イケダ ダイチ', phone: '090-0000-0010',
+                address: '東京都〇〇区△△ 10-X', car: 'タフト G', carReg: '練馬 500 こ 00-10',
+                inspectionDue: '2026/07/07', insuranceDue: '2026/07/06 (あいおい)',
+                tags: ['ダイハツ車', '要注意(過度な要求)'], memo: '些細な傷などで無償修理を要求される傾向あり。対応時は必ずフロントマネージャーを通すこと。'
+            }
+        };
+
+        const calls = [
+            { id: 'CALL-101', custId: 'C001', type: 'incoming', date: '2026/07/14 10:15', subject: 'クラウンの乗り換え相談', aiSummary: '車検が来年5月に控えているため、新型への乗り換えを検討中。今週末の土曜午後に試乗を希望。代車は不要。', kasuhara: false, aiTasks: [{ task: '土曜午後の試乗車(クラウン)手配', status: '完了' }] },
+            { id: 'CALL-102', custId: 'C003', type: 'incoming', date: '2026/07/14 14:20', subject: '整備不備に対するお怒り', aiSummary: '【シリエル分析：強い口調・カスハラリスク有】先日納車したヤリスの車内清掃が不十分だったことに対し、強い口調でお怒り。直ちに責任者からの折り返しと自宅への謝罪訪問を要求されている。', kasuhara: true, aiTasks: [{ task: '店長へエスカレーション・即時折り返し', status: '未完了' }, { task: '訪問謝罪の日程調整', status: '未完了' }] },
+            { id: 'CALL-103', custId: 'C002', type: 'incoming', date: '2026/07/13 11:30', subject: '12ヶ月点検の予約変更', aiSummary: '子供の熱のため、明日の12ヶ月点検を来週土曜日に変更希望。キッズスペースの利用予定あり。', kasuhara: false, aiTasks: [{ task: '次期Jサービス予約枠の変更', status: '完了' }] },
+            { id: 'CALL-104', custId: 'C004', type: 'incoming', date: '2026/07/13 15:00', subject: '法人の点検日程調整', aiSummary: '社用車(タント)の定期点検について、総務部より連絡あり。来週水曜日の午前中に引き取り希望。', kasuhara: false, aiTasks: [{ task: '引き取り担当者の手配', status: '完了' }] },
+            { id: 'CALL-105', custId: 'C006', type: 'incoming', date: '2026/07/12 10:00', subject: '残価設定ローンの相談', aiSummary: '現在のハリアーの残価設定ローンについて、買い取り金額の目安を知りたいとのこと。後日、営業担当より折り返し予定。', kasuhara: false, aiTasks: [{ task: '査定額の算出', status: '未完了' }, { task: '営業からの折り返し', status: '未完了' }] },
+            { id: 'CALL-106', custId: 'C010', type: 'incoming', date: '2026/07/11 16:45', subject: 'ボディの傷に関するクレーム', aiSummary: '【シリエル分析：強い口調・カスハラリスク有】身に覚えのない傷がドアについていると主張。無償での修理を強く要求。フロントマネージャーへ対応を引き継ぐ。', kasuhara: true, aiTasks: [{ task: 'マネージャーへの報告', status: '完了' }, { task: '入庫時の写真確認', status: '未完了' }] }
+        ];
+
+        const memos = [
+            { custId: 'C003', date: '2026/07/14 14:35', source: '手入力', content: '【店長より】先ほどの電話録音を再生し内容を確認しました。明日の朝、私と山田で佐藤様のご自宅へお詫びに伺います。次期Jの対応履歴にも残してください。', important: true },
+            { custId: 'C001', date: '2026/07/14 10:30', source: 'シリエル連携', content: '試乗予約を次期Jに登録完了。当日の見積書も準備済み。', important: false },
+            { custId: 'C003', date: '2026/02/15 11:00', source: '次期J履歴', content: '洗車の拭き上げが甘かったとご指摘あり。その場で謝罪し拭き直しを実施。次回は店長確認を徹底する。', important: true },
+            { custId: 'C010', date: '2026/07/11 17:00', source: '手入力', content: '【マネージャーより】傷の件、入庫時の状態確認を実施中。現時点では無償対応の約束はしないよう全スタッフに周知。', important: true }
+        ];
+
+        // Chat Data (ToyoTalk / SMS)
+        const chats = {
+            'C001': [
+                { id: 1, sender: 'store', type: 'トヨトーク', date: '2026/07/13 14:00', text: '豊田様、いつもお世話になっております。クラウンの新しいカタログが入荷いたしました。ご来店時にお渡しできればと思います。' },
+                { id: 2, sender: 'customer', type: 'トヨトーク', date: '2026/07/13 15:30', text: 'ありがとう。今週末、妻と一緒に行こうと思っています。試乗はできますか？' },
+                { id: 3, sender: 'store', type: 'トヨトーク', date: '2026/07/13 16:00', text: 'ご連絡ありがとうございます。土曜日の午後であれば、新型クラウンの試乗車をご用意可能です。追ってお電話させていただきます。' }
+            ],
+            'C002': [
+                { id: 1, sender: 'store', type: 'SMS', date: '2026/06/15 10:00', text: '鈴木様、次回の車検満了日が近づいております。早期予約でお得なキャンペーンを実施中です。' },
+                { id: 2, sender: 'customer', type: 'SMS', date: '2026/06/15 12:00', text: '案内ありがとう。来月予約したいです。' }
+            ],
+            'C009': [
+                { id: 1, sender: 'store', type: 'トヨトーク', date: '2026/07/01 10:00', text: '加藤様、ご予約いただいている12ヶ月点検は明日の10時からとなっております。お待ちしております。' },
+                { id: 2, sender: 'customer', type: 'トヨトーク', date: '2026/07/01 12:30', text: '承知しました。よろしくお願いします。' }
+            ]
+        };
+
+        // --- Core Functions ---
+        let currentPreviousView = 'home';
+        let currentIntegrationCustId = null;
+
+        function showView(viewId) {
+            document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+            
+            if(viewId !== 'detail') {
+                currentPreviousView = viewId;
+                document.querySelectorAll('aside nav button').forEach(b => {
+                    b.classList.remove('bg-toyota-blue', 'text-white');
+                    b.classList.add('text-gray-400');
+                });
+                const activeBtn = document.getElementById('nav-' + viewId);
+                if(activeBtn) {
+                    activeBtn.classList.remove('text-gray-400');
+                    activeBtn.classList.add('bg-toyota-blue', 'text-white');
+                }
+            }
+            
+            document.getElementById('view-' + viewId).classList.remove('hidden');
+
+            if (viewId === 'history') renderHistory();
+            if (viewId === 'customers') renderCustomers();
+            if (viewId === 'sms') renderIntegrationChatList();
+        }
+
+        function switchDetailTab(tabId) {
+            const tabs = ['calls', 'chat', 'memos'];
+            tabs.forEach(t => {
+                const btn = document.getElementById('tab-' + t);
+                const view = document.getElementById('detail-' + t);
+                if (t === tabId) {
+                    btn.className = 'px-6 py-3 text-sm font-bold tab-active transition-colors';
+                    view.classList.remove('hidden');
+                } else {
+                    btn.className = 'px-6 py-3 text-sm font-bold text-slate-400 transition-colors hover:text-slate-600';
+                    view.classList.add('hidden');
+                }
+            });
+        }
+
+        function triggerCall(custId) {
+            const cust = customers[custId];
+            const isKasuhara = custId === 'C003' || custId === 'C010';
+            const popup = document.getElementById('incoming-popup');
+            const header = document.getElementById('popup-header');
+            
+            if (isKasuhara) {
+                popup.className = "hidden fixed bottom-8 right-8 w-80 bg-white rounded-2xl shadow-2xl border-2 border-red-600 overflow-hidden cursor-pointer popup-slide z-50";
+                header.className = "p-3 text-white flex justify-between items-center bg-red-600";
+                header.innerHTML = '<span class="font-bold text-sm flex items-center gap-2">⚠️ 要注意顧客 着信中</span><span class="text-xs opacity-80 font-mono">00:04</span>';
+            } else {
+                popup.className = "hidden fixed bottom-8 right-8 w-80 bg-white rounded-2xl shadow-2xl border-2 border-toyota-navy overflow-hidden cursor-pointer popup-slide z-50";
+                header.className = "p-3 text-white flex justify-between items-center bg-toyota-navy";
+                header.innerHTML = '<span class="font-bold text-sm flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-white animate-pulse"></span> 店舗着信中</span><span class="text-xs opacity-80 font-mono">00:04</span>';
+            }
+
+            document.getElementById('popup-content').innerHTML = `
+                <p class="text-xs text-slate-500 mb-1 font-mono">${cust.phone}</p>
+                <p class="text-2xl font-bold mb-3 text-slate-800">${cust.name} 様</p>
+                <div class="flex flex-wrap gap-1 mb-3">
+                    ${cust.tags.map(t => `<span class="${isKasuhara ? 'bg-red-100 text-red-700 border-red-200' : 'bg-slate-100 text-slate-700 border-slate-200'} border text-[10px] px-2 py-0.5 rounded font-bold">${t}</span>`).join('')}
+                </div>
+                <div class="text-[10px] bg-blue-50 text-blue-800 border border-blue-100 p-2 rounded">
+                    <strong>次期J 最新メモ:</strong><br>
+                    ${cust.memo.substring(0, 30)}...
+                </div>
+            `;
+            
+            popup.onclick = () => {
+                popup.classList.add('hidden');
+                openDetail(custId, 'calls');
+            };
+            popup.classList.remove('hidden');
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            list.innerHTML = calls.map(call => {
+                const cust = customers[call.custId];
+                const badge = call.kasuhara 
+                    ? '<span class="bg-red-600 text-white px-2 py-1 rounded text-[10px] font-bold shadow-sm">⚠️ カスハラ警告</span>'
+                    : '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold border border-green-200">着信</span>';
+                
+                return `
+                    <tr class="border-b hover:bg-slate-50 transition-colors group cursor-pointer" onclick="openDetail('${cust.id}', 'calls')">
+                        <td class="py-4 px-4 whitespace-nowrap">
+                            ${badge}<br>
+                            <span class="text-[8px] bg-slate-100 text-slate-500 px-1 py-0.5 mt-1 inline-block rounded border border-slate-200">次期Jへ出力済</span>
+                        </td>
+                        <td class="py-4 px-4 text-xs font-medium text-slate-600 whitespace-nowrap">${call.date}</td>
+                        <td class="py-4 px-4 whitespace-nowrap">
+                            <span class="font-bold text-toyota-blue group-hover:underline text-sm">${cust.name}</span>
+                            <p class="text-[10px] text-slate-400 font-mono mt-0.5">${cust.phone}</p>
+                        </td>
+                        <td class="py-4 px-4">
+                            <p class="text-sm font-bold ${call.kasuhara ? 'text-red-700' : 'text-slate-800'} mb-1">${call.subject}</p>
+                            <p class="text-[10px] text-slate-600 line-clamp-2">${call.aiSummary}</p>
+                        </td>
+                        <td class="py-4 px-4 text-right whitespace-nowrap">
+                            <button class="text-slate-500 hover:text-toyota-blue px-3 py-1.5 rounded-full hover:bg-blue-50 transition-colors text-xs font-bold border border-slate-300 hover:border-blue-200" onclick="event.stopPropagation(); showModal('audio')">▶️ 再生</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderCustomers() {
+            const list = document.getElementById('customers-list');
+            list.innerHTML = Object.values(customers).map(cust => `
+                <tr class="border-b hover:bg-slate-50 transition-colors group cursor-pointer" onclick="openDetail('${cust.id}', 'calls')">
+                    <td class="py-4 px-4">
+                        <span class="font-bold text-toyota-blue group-hover:underline text-sm">${cust.name}</span>
+                        <p class="text-[10px] text-slate-400 font-mono mt-0.5">${cust.id}</p>
+                    </td>
+                    <td class="py-4 px-4 text-sm font-mono text-slate-700">${cust.phone}</td>
+                    <td class="py-4 px-4 text-sm font-medium text-slate-700">${cust.car}</td>
+                    <td class="py-4 px-4">
+                        <div class="flex flex-wrap gap-1">
+                            ${cust.tags.map(t => `<span class="${t.includes('要注意') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-100 text-slate-600 border-slate-200'} border px-2 py-0.5 rounded text-[10px] font-bold">${t}</span>`).join('')}
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // --- 統合メッセージ画面 (左メニュー用) ---
+        function renderIntegrationChatList() {
+            const list = document.getElementById('integration-chat-list');
+            const chatCustomers = Object.keys(chats).filter(id => chats[id] && chats[id].length > 0);
+            
+            if (chatCustomers.length === 0) {
+                list.innerHTML = '<div class="p-6 text-center text-slate-400 text-sm">メッセージ履歴がありません</div>';
+                return;
+            }
+
+            list.innerHTML = chatCustomers.map(id => {
+                const cust = customers[id];
+                const lastChat = chats[id][chats[id].length - 1];
+                const isActive = currentIntegrationCustId === id;
+                const isToyoTalk = lastChat.type === 'トヨトーク';
+
+                return `
+                    <div class="p-4 border-b cursor-pointer transition-colors ${isActive ? 'bg-blue-50' : 'hover:bg-slate-50'}" onclick="renderIntegrationChatRoom('${id}')">
+                        <div class="flex justify-between items-start mb-1">
+                            <h4 class="font-bold text-sm text-slate-800 truncate">${cust.name} 様</h4>
+                            <span class="text-[10px] text-slate-400 whitespace-nowrap">${lastChat.date.split(' ')[0]}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[9px] px-1.5 py-0.5 rounded text-white ${isToyoTalk ? 'bg-lineworks' : 'bg-blue-500'} font-bold">${lastChat.type}</span>
+                            <p class="text-xs text-slate-500 truncate flex-1">${lastChat.text}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // If there's an active one, render it, else render first one by default if not set
+            if (!currentIntegrationCustId && chatCustomers.length > 0) {
+                renderIntegrationChatRoom(chatCustomers[0]);
+            }
+        }
+
+        function renderIntegrationChatRoom(custId) {
+            currentIntegrationCustId = custId;
+            // Update left pane highlighting silently
+            const list = document.getElementById('integration-chat-list');
+            if(list.innerHTML !== '') renderIntegrationChatList();
+
+            const cust = customers[custId];
+            const chatData = chats[custId] || [];
+            const area = document.getElementById('integration-chat-area');
+            
+            if (chatData.length === 0) return;
+            
+            const isToyoTalk = chatData[0].type === 'トヨトーク';
+            const bgClass = isToyoTalk ? 'bg-[#82a3c7]' : 'bg-slate-100';
+            
+            const messagesHtml = chatData.map(msg => {
+                const isStore = msg.sender === 'store';
+                if (isToyoTalk) {
+                    if (isStore) {
+                        return `<div class="flex justify-end mb-4"><div class="flex items-end gap-1"><span class="text-[9px] text-slate-600 mb-1 font-mono">${msg.date.split(' ')[1]}</span><div class="bg-[#8ce946] text-[#000] p-3 text-sm rounded-2xl rounded-tr-sm shadow-sm max-w-[280px] leading-relaxed">${msg.text}</div></div></div>`;
+                    } else {
+                        return `<div class="flex justify-start mb-4"><div class="w-8 h-8 rounded-full bg-slate-300 text-white flex items-center justify-center font-bold mr-2 shrink-0 text-xs">客</div><div class="flex items-end gap-1"><div class="bg-white text-slate-800 p-3 text-sm rounded-2xl rounded-tl-sm shadow-sm max-w-[280px] leading-relaxed">${msg.text}</div><span class="text-[9px] text-slate-600 mb-1 font-mono">${msg.date.split(' ')[1]}</span></div></div>`;
+                    }
+                } else {
+                    if (isStore) {
+                        return `<div class="flex justify-end mb-4"><div class="max-w-[70%]"><div class="bg-blue-500 text-white px-4 py-2.5 text-sm rounded-2xl rounded-br-sm shadow-sm leading-relaxed">${msg.text}</div><div class="text-right text-[9px] text-slate-400 mt-1 font-mono">${msg.date}</div></div></div>`;
+                    } else {
+                        return `<div class="flex justify-start mb-4"><div class="max-w-[70%]"><div class="bg-slate-200 text-slate-800 px-4 py-2.5 text-sm rounded-2xl rounded-bl-sm shadow-sm leading-relaxed">${msg.text}</div><div class="text-left text-[9px] text-slate-400 mt-1 font-mono">${msg.date}</div></div></div>`;
+                    }
+                }
+            }).join('');
+
+            area.innerHTML = `
+                <div class="h-14 border-b px-6 flex items-center justify-between shrink-0 bg-white/90 backdrop-blur-sm z-10 shadow-sm">
+                    <div class="flex items-center gap-3">
+                        <h3 class="font-bold text-slate-800">${cust.name} 様</h3>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full text-white font-bold ${isToyoTalk ? 'bg-lineworks' : 'bg-blue-500'}">${isToyoTalk ? 'トヨトーク' : 'SMS'}</span>
+                    </div>
+                    <button class="text-xs font-bold text-toyota-blue hover:underline bg-blue-50 px-3 py-1.5 rounded-full" onclick="openDetail('${custId}', 'chat')">CRM詳細を開く</button>
+                </div>
+                <div class="flex-1 p-6 overflow-y-auto custom-scrollbar ${bgClass}" id="integration-chat-scroll">
+                    ${messagesHtml}
+                </div>
+                <div class="p-4 bg-white border-t flex gap-2 shrink-0">
+                    <button class="text-slate-400 text-xl px-2 hover:text-slate-600">📎</button>
+                    <textarea placeholder="メッセージを入力..." class="flex-1 border rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-toyota-blue resize-none h-10 overflow-hidden" rows="1"></textarea>
+                    <button class="${isToyoTalk ? 'bg-lineworks' : 'bg-blue-500'} text-white px-6 py-2 rounded-xl text-sm font-bold shadow-sm hover:opacity-90 transition-opacity">送信</button>
+                </div>
+            `;
+            const scroll = document.getElementById('integration-chat-scroll');
+            scroll.scrollTop = scroll.scrollHeight;
+        }
+
+        // --- 顧客詳細画面用 チャットレンダリング ---
+        function renderDetailChat(custId) {
+            const chatData = chats[custId] || [];
+            const container = document.getElementById('detail-chat');
+            
+            if (chatData.length === 0) {
+                container.innerHTML = '<div class="text-center text-slate-400 text-sm py-10 flex-1">メッセージ履歴はありません</div>';
+                return;
+            }
+
+            const isToyoTalk = chatData[0].type === 'トヨトーク';
+            const bgClass = isToyoTalk ? 'bg-[#82a3c7]' : 'bg-slate-100';
+            
+            const messagesHtml = chatData.map(msg => {
+                const isStore = msg.sender === 'store';
+                if (isToyoTalk) {
+                    if (isStore) {
+                        return `<div class="flex justify-end mb-4"><div class="flex items-end gap-1"><span class="text-[9px] text-slate-600 mb-1 font-mono">${msg.date.split(' ')[1]}</span><div class="bg-[#8ce946] text-[#000] p-3 text-sm rounded-2xl rounded-tr-sm shadow-sm max-w-[280px] leading-relaxed">${msg.text}</div></div></div>`;
+                    } else {
+                        return `<div class="flex justify-start mb-4"><div class="w-8 h-8 rounded-full bg-slate-300 text-white flex items-center justify-center font-bold mr-2 shrink-0 text-xs">客</div><div class="flex items-end gap-1"><div class="bg-white text-slate-800 p-3 text-sm rounded-2xl rounded-tl-sm shadow-sm max-w-[280px] leading-relaxed">${msg.text}</div><span class="text-[9px] text-slate-600 mb-1 font-mono">${msg.date.split(' ')[1]}</span></div></div>`;
+                    }
+                } else {
+                    if (isStore) {
+                        return `<div class="flex justify-end mb-4"><div class="max-w-[70%]"><div class="bg-blue-500 text-white px-4 py-2.5 text-sm rounded-2xl rounded-br-sm shadow-sm leading-relaxed">${msg.text}</div><div class="text-right text-[9px] text-slate-400 mt-1 font-mono">${msg.date}</div></div></div>`;
+                    } else {
+                        return `<div class="flex justify-start mb-4"><div class="max-w-[70%]"><div class="bg-slate-200 text-slate-800 px-4 py-2.5 text-sm rounded-2xl rounded-bl-sm shadow-sm leading-relaxed">${msg.text}</div><div class="text-left text-[9px] text-slate-400 mt-1 font-mono">${msg.date}</div></div></div>`;
+                    }
+                }
+            }).join('');
+
+            container.innerHTML = `
+                <div class="flex-1 p-6 overflow-y-auto custom-scrollbar ${bgClass}" id="detail-chat-scroll">
+                    ${messagesHtml}
+                </div>
+                <div class="p-4 bg-white border-t flex gap-2 shrink-0">
+                    <select class="border rounded-lg text-xs p-2 bg-slate-50 focus:outline-none font-bold text-slate-700">
+                        <option>トヨトーク</option>
+                        <option>SMS</option>
+                    </select>
+                    <input type="text" placeholder="メッセージを入力..." class="flex-1 border rounded-lg px-4 text-sm focus:outline-none focus:border-toyota-blue">
+                    <button class="${isToyoTalk ? 'bg-lineworks' : 'bg-blue-500'} text-white px-6 py-2 rounded-lg text-sm font-bold shadow-sm hover:opacity-90 transition-opacity">送信</button>
+                </div>
+            `;
+        }
+
+        function openDetail(custId, initialTab = 'calls') {
+            const cust = customers[custId];
+            document.getElementById('detail-name').textContent = cust.name;
+            document.getElementById('detail-kana').textContent = cust.kana;
+            document.getElementById('detail-icon').textContent = cust.name.charAt(0);
+            document.getElementById('detail-phone').textContent = cust.phone;
+            document.getElementById('detail-address').textContent = cust.address;
+            document.getElementById('detail-memo').textContent = cust.memo;
+            document.getElementById('detail-car').textContent = cust.car;
+            document.getElementById('detail-carreg').textContent = cust.carReg;
+            document.getElementById('detail-inspection').textContent = cust.inspectionDue;
+            document.getElementById('detail-insurance').textContent = cust.insuranceDue;
+            document.getElementById('detail-tags').innerHTML = cust.tags.map(t => `<span class="${t.includes('要注意') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-white border-slate-200 text-slate-600'} border px-2 py-1 rounded text-[10px] font-bold">${t}</span>`).join('');
+
+            // Calls (Shiriel Analysis)
+            const custCalls = calls.filter(c => c.custId === custId);
+            document.getElementById('detail-calls').innerHTML = custCalls.length === 0 ? '<p class="text-slate-400 text-sm text-center py-10">通話履歴はありません</p>' : custCalls.map(call => `
+                <div class="border border-slate-200 rounded-xl p-5 bg-white shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+                    ${call.kasuhara ? '<div class="absolute top-0 left-0 w-1 h-full bg-red-600"></div>' : '<div class="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>'}
+                    <div class="flex justify-between items-start mb-4 border-b pb-3 pl-2">
+                        <div>
+                            <span class="${call.kasuhara ? 'bg-red-600 text-white border-red-700' : 'bg-slate-100 text-slate-700 border-slate-300'} border px-2 py-0.5 rounded text-[10px] font-bold mr-2">通話録音</span>
+                            <span class="font-bold text-sm text-slate-800">${call.date} | ${call.subject}</span>
+                        </div>
+                        <button class="text-toyota-blue text-xs font-bold bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors flex items-center gap-1 border border-blue-200" onclick="showModal('audio')">
+                            ▶ 録音再生
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pl-2">
+                        <div class="${call.kasuhara ? 'bg-red-50/50 border-red-200' : 'bg-blue-50/50 border-blue-100'} p-4 rounded-xl border">
+                            <p class="text-[10px] font-bold ${call.kasuhara ? 'text-red-800' : 'text-blue-800'} mb-2 uppercase flex items-center gap-1">✦ シリエル要約・分析 <span class="ml-auto bg-white px-2 py-0.5 rounded border text-[8px] text-slate-500 font-normal">次期J出力済</span></p>
+                            <p class="text-xs text-slate-700 leading-relaxed font-medium">${call.aiSummary}</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 mb-2 uppercase">抽出タスク (シリエル連携)</p>
+                            <div class="space-y-2">
+                                ${call.aiTasks.map(t => `
+                                    <div class="flex items-center justify-between bg-slate-50 border border-slate-200 p-2.5 rounded-lg text-[10px]">
+                                        <span class="font-medium text-slate-700">${t.task}</span>
+                                        <span class="${t.status === '完了' ? 'bg-slate-200 text-slate-600 border-slate-300' : 'bg-red-50 text-red-700 border-red-200'} border px-2 py-0.5 rounded font-bold">${t.status}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // Detail Chat
+            renderDetailChat(custId);
+
+            // Memos
+            const custMemos = memos.filter(m => m.custId === custId);
+            document.getElementById('memo-count').textContent = custMemos.length;
+            document.getElementById('detail-memos').innerHTML = custMemos.length === 0 ? '<p class="text-slate-400 text-sm text-center py-10">履歴はありません</p>' : custMemos.map(memo => `
+                <div class="border-l-4 ${memo.important ? 'border-red-500 bg-red-50' : 'border-toyota-blue bg-white'} rounded-r-xl p-4 shadow-sm border-y border-r border-slate-200">
+                    <div class="flex justify-between items-center mb-2">
+                        <div class="flex items-center gap-3">
+                            <span class="bg-slate-200 text-slate-700 px-2 py-0.5 rounded text-[9px] font-bold border border-slate-300">${memo.source}</span>
+                            <span class="font-bold text-xs text-slate-800">${memo.author || 'システム'}</span>
+                            <span class="text-[10px] text-slate-400 font-mono">${memo.date}</span>
+                        </div>
+                        ${memo.important ? '<span class="text-red-600 text-[10px] font-bold">⚠️ 重要</span>' : ''}
+                    </div>
+                    <p class="text-sm text-slate-700 leading-relaxed font-medium">${memo.content}</p>
+                </div>
+            `).join('');
+
+            switchDetailTab(initialTab);
+            
+            const closeBtn = document.querySelector('#view-detail button[onclick^="showView"]');
+            closeBtn.setAttribute('onclick', `showView('${currentPreviousView}')`);
+            
+            // Scroll detail chat to bottom if selected
+            if(initialTab === 'chat') {
+                setTimeout(() => {
+                    const scroll = document.getElementById('detail-chat-scroll');
+                    if(scroll) scroll.scrollTop = scroll.scrollHeight;
+                }, 50);
+            }
+
+            showView('detail');
+        }
+
+        function showModal(id) { document.getElementById('modal-' + id).classList.remove('hidden'); }
+        function hideModal(id) { document.getElementById('modal-' + id).classList.add('hidden'); }
+        
+        // Initialize
+        renderHistory();
+        renderCustomers();
+    </script>
+</body>
+</html>
